@@ -1,0 +1,13 @@
+Ensure Java 1.5 is in the path (such as C:\Program Files\Java\jdk1.5.0\bin)
+
+----------------------------
+To compile Viewer application:
+
+..\viewer>javac -d bin src\*.java                   //** this creates ..\viewer\bin\*.class files
+..\viewer>javah -classpath bin -jni GridModel       //** this creates ..\viewer\GridModel.h, which is included by ..\Mapper\include\RmGridModel.h
+
+
+----------------------------
+To run viewer application:
+
+..\viewer>java -classpath bin MapViewer [filename|server controlPort]

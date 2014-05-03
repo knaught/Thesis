@@ -1,0 +1,43 @@
+<table height=100% width=100%>
+<tr valign=center><td align=center>
+<h2>
+Please see the <a href="doc\html\index.html">Robot Mapper Documentation</a> 
+for details on project organization, program flow, builds and dependencies,
+full API specification, and source code.
+</h2>
+</td></tr>
+</table>
+
+<!--
+MapperClient (./Mapper/MapperClient)
+- Output filename:  ../bin/MapperClient.exe
+- Source files:  ../src/client.cpp
+- Object/library modules:  ../lib/Mapper.lib wsock32.lib (and defaults)
+
+MapperCon (./Mapper/MapperCon)
+- Output filename:  ../bin/Mapper.exe
+- Source files:  ../src/main.cpp
+- Object/library modules:  Aria.lib ../lib/Polygon.lib ../lib/Mapper.lib wsock32.lib (and defaults)
+
+MapperLib (./Mapper/MapperLib)
+- Output filename:  ../lib/Mapper.lib
+- Source files:  ../src/Rm*.cpp
+- Header files:  ../include/Rm*.h
+
+MapperDll (./Mapper/MapperDll)
+- Output filename:  ../bin/Mapper.dll
+- Source files:  ../src/Rm*.cpp
+- Header files:  ../include/RmJavaGridModel.h
+- Object/library modules:  Aria.lib ../lib/Polygon.lib wsock32.lib (and defaults)
+
+Polygon (./Mapper/polygon)
+- Output filename:  ../lib/Polygon.lib
+- Source files: *.c
+- Header files: *.h
+
+Viewer (./Mapper/viewer)
+- Executable:  bin/MapViewer.class
+- Output destination:  bin
+- Source files:  src/*.java
+- Image files:  images/*.gif
+-->

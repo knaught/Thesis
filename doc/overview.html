@@ -1,0 +1,564 @@
+/**
+
+\mainpage
+The Robot Mapper classes provide a general framework for mapping an environment
+using a robot, specifically an environment mapped over a probabilistic occupancy grid using a
+sonar-based Pioneer 2-AT robot.  It supports command line and library execution; 
+off-line (recorded) and on-line (live) map construction and viewing;
+on-board and wireless operation; as well simulated and real-world environments.
+Robot Mapper also serves as the engine (in its DLL form) to the Java-based Map Viewer application,
+which is documented separately.
+
+\section org Organization
+
+The classes, structures and namespaces that compose the Robot Mapper suite 
+fall into three broad categories, listed and diagrammed below.  
+The diagram also shows inheritance relationships, with arrows pointing to
+superclasses.
+
+<!--table border=0><tr valign=top>
+<td>
+<ul>
+<li><b>Utility</b>:  RmUtility, RmExceptions, RmMutableMatrix, RmMutableCartesianGrid
+<li><b>Robot Interface</b>: RmPioneerController, RmActionHook, RmActionHandler, RmSonarMapper
+<li><b>Mapping</b>: RmSonarMap, RmBayesCertaintyGrid, RmGlobalMap, RmLocalMap, RmBayesSonarModel
+</ul>
+</td>
+<td>
+<img src="classDiagram.jpg">
+</td>
+</tr></table-->
+
+<ul>
+<li><b>Utility</b>:  RmUtility, RmExceptions, RmMutableMatrix, RmMutableCartesianGrid
+<li><b>Robot Interface</b>: RmPioneerController, RmActionHook, RmActionHandler, RmSonarMapper
+<li><b>Mapping</b>: RmSonarMap, RmBayesCertaintyGrid, RmGlobalMap, RmLocalMap, RmBayesSonarModel
+</ul>
+
+<center><img src="classDiagram.jpg"></center>
+
+With the exception of RmUtility::SonarReading (which depends on the ArRobot and ArPose
+classes documented in the Aria API), the utility classes are independent of any specific 
+application.  The Robot Interface classes are specific to the ActivMedia Aria API and Pioneer 2-AT,
+which provide a single-step robot initialization and sonar collection and recording mechanism.
+The Mapping classes provide the Bayesian occupancy grid sonar mapping and localization functionality.
+
+There are three source files included within RmMapper 
+that have functions and definitions outside the scope of a class, structure,
+or namespace, and thus aren't included in this documentation.
+These are src/main.cpp (the main application), src/client.cpp (the wireless client
+application), and src/RmJavaGridModel.cpp (the Java native interface bridge between 
+RmMapper and the separate graphical Java map viewer).
+The source code for all of these is available via the File List link at the top of the page.
+
+\section start Program Flow
+While the previous section briefly describes the hierarchical class structure,
+this section focuses on program flow over five different modes of operation.
+
+The modes have to do with whether sonar data processed is live or static,
+and for live data, whether the robot or simulator is operated locally or remotely.
+Additionally, the map viewer may build maps using static or live data, both
+remotely or locally.
+
+<ol>
+<li>Live local: a map is built using live data from the robot or simulator 
+via onboard or directly connected mapping software
+<li>Static local: a map is built using pre-recorded static sonar data
+<li>Live remote:  a map is built using live data from the robot or simulator
+over a wireless UDP connection
+<li>Static local viewer:  a map is simultaneously built and viewed using pre-recorded static sonar data
+<li>Live remote viewer:  a map is simultaneously built and viewed using live data from the robot 
+or simulator over a wireless UDP connection
+</ol>
+
+The below diagram illustrates these and several other relationships, to include
+operational, functional, controlling process, inheritance, and process flow.
+
+The first three operational modes are represented in the below by the three controlling process 
+circles labeled "Mapper Live", "Mapper Static", and "Mapper Remote".
+All three of these are elements of src/main.cpp. 
+The remaining two modes, which overlay the map viewer functionality, 
+are identified by the display symbols labeled "Viewer Static" and "Viewer Remote Client".
+These are elements of viewer/src/MapViewer.java.
+
+There are also six distinct functional regions shown in the diagram.  
+The large yellow area encompasses all the software within RmMapper that is responsible for
+acquiring data and building a map.  
+Within that region, the live local flow is shaded in burgandy;
+the static local flow is shaded in blue;
+the live remote flow and live remote viewer flow are shaded in red; 
+and the static local viewer flow is shaded in green.
+Finally, those elements that fall outside the yellow region altogether are those that are
+external to the RmMapper application.
+
+<center><img src="flowDiagram.jpg"></center>
+
+<!--table cellpadding=0 cellpadding=5 border=0><tr>
+<td valign=top-->
+
+Controlling processes, as mentioned, are shown as circles. 
+Those circles drawn as an arrow contain a main control loop; those that are shaded are
+console applications.  
+Mapper Live, which doesn't utilize a control loop, creates an
+RmPioneerController object that itself performs all the mapping functionality, while
+src/main.cpp blocks until that object completes its task and is destroyed
+(see mapFromRobot() in src/main.cpp).
+Those processes that overlap an object indicate those processes <i>are</i> that object.
+For example, the Robot Sim process, which represents the robot or simulator, is
+actually encapsulated within, and therefore is, an RmPioneerController object.
+
+Objects are further illustrated with nesting, which indicates inheritance relationships.
+For example, an RmGlobalMap <i>is</i> an RmBayesCertaintyGrid, which <i>is</i>, in turn,
+an RmMutableCartesianGrid, etc.  The unique relationship between an RmGlobalMap and
+RmLocalMap is shown through adjacency and multiplicity:  an RmGlobalMap is composed of
+multiple RmLocalMap objects.
+
+Process flow is shown using arrows.  The starting end of the arrow identifies the calling
+object; the terminating end, the object being called.  If a method is identified on the
+line, it is that of the called object.  For example, RmSonarMapper, in the middle of the diagram,
+calls RmServer::sendClientReply().  
+Methods that utilize a return value are shown with a diamond on the calling object,
+and the return value follows the method name, with a colon separating them.  
+For example, RmJavaGridModel, in the green
+region, calls RmSonarMapper::mapReading() and expects a map string in response.  This is then
+passed back to Viewer Static as its return value for stepSonarMapper().
+Dashed arrows indicate wireless communication.
+
+<!--/td>
+<td valign=top>
+<center><img src="flowDiagram.jpg"></center>
+</td>
+</tr></table-->
+
+As an example that ties all this together, 
+consider the live remote viewer mode, where the robot is controlled
+wirelessly and the map is built in real-time, also on a wireless console.
+Three applications are executed in this case:  the server on the robot, Mapper Remote
+(bin/Mapper.exe); and two on the client, bin/MapperClient.exe and viewer/bin/MapViewer.class.
+Once handshakes have been exchanged between the server and the two clients,
+the user controls the robot via the console shown in the lower right hand side of the diagram.
+These key controls are acquired by Client, and communicated wirelessly via RmClient to the 
+Control RmServer on Mapper Remote, which then translates the control into a motion command
+and forwards it on to the robot (or simulator), Robot Sim (an RmPioneerController), 
+using the Aria object ArActionKeydrive.
+While the robot is physically responding to the command, the Pioneer
+is sending sonar data to RmSonarMapper via the Aria API's call to fire() 
+RmSonarMapper::handleAction().
+RmSonarMapper saves the sonar data to a *.sd file, and asks RmGlobalMap to update the
+map using that data.  RmGlobalMap returns the map update string, which RmSonarMapper gives to
+the Viewer RmServer within Mapper Remote.  Mapper Remote then sends the string wirelessly 
+back to Viewer Remote Client.  Finally, the viewer processes the map string and updates the 
+map display accordingly.
+
+\section build Builds and Dependencies
+This section contains build-specific information that is independent of the
+classes and other structures that compose the RmMapper application, but is provided
+as a description of the environment and configuration used for compilation and build.
+
+\subsection paths Paths
+The following paths should be included in the PATH environment variable
+(set via System Properties - Advanced - Environment Variables):
+<ul>
+<li>C:\\Program Files\\Java\\jdk1.5.0\\bin
+<li>C:\\Program Files\\ActivMedia Robotics\\Aria-2.1-1\\bin
+<li>..\\Mapper\\bin
+</ul>
+
+\subsection projects Projects
+The RmMapper workspace is divided up
+into five projects.  Two of these correspond to the client
+and server control applications, and three are the libraries that provide the mapping
+functionality:
+
+<table border=0 cellpadding=0 cellspacing=5>
+<tr>
+	<td><b>Project</b></td>
+	<td><b>Build</b></td>
+	<td><b>Description</b></td>
+</tr>
+<tr valign=top>
+	<td>MapperCon</td>
+	<td>../bin/Mapper.exe</td>
+	<td>Main console/server application for mapping pre-recorded or live sonar data</td>
+</tr>
+<tr valign=top>
+	<td>MapperClient</td>
+	<td>../bin/MapperClient.exe</td>
+	<td>Client application for controlling robot drive wirelessly using UDP/IP</td>
+</tr>
+<tr valign=top>
+	<td>MapperLib</td>
+	<td>../lib/Mapper.lib</td>
+	<td>Static library of all mapping functionality</td>
+</tr>
+<tr valign=top>
+	<td>MapperDll</td>
+	<td>../bin/Mapper.dll</td>
+	<td>Dynamic library of all mapping functionality with Java map viewer interface</td>
+</tr>
+<tr valign=top>
+	<td>Polygon</td>
+	<td>../lib/Polygon.lib</td>
+	<td>Third party code for line and polygon functions</td>
+</tr>
+</table>
+
+\subsection config IDE Configuration
+The application is compiled using Microsoft Visual C++ 6.0 (build attempts with
+.NET were unsuccessful), linked with Aria 2.1.1, and integrated with the graphical
+map viewer written using Java 1.5.0.  
+
+Visual C++ configuration is given by the following:
+
+Dependencies are established for each project that isn't a static library
+in the Object/library modules
+field in the Link tab of Project Properties.  Shown in the image are those dependencies
+specific to the main application, MapperCon.  MapperClient is not dependent upon
+Aria.lib or ../lib/Polygon.lib.  MapperDll is not dependent upon ../lib/Mapper.lib.
+
+<center><img src="projectSettingsLink.jpg"></center>
+
+Visual C++ is also configured to look in specific directories for any include 
+or library files, as shown:
+
+<center>
+<img src="libraryDirectories.jpg"><br>
+<img src="includeDirectories.jpg">
+</center>
+
+\section usage Usage
+While the commands issued at the command line are dependent upon the build setups,
+this documentation assumes:
+<ul>
+<li>src/client.cpp is built as MapperClient.exe (Client)
+<li>src/main.cpp is built as Mapper.exe (Server)
+<li>src/viewer.bat is a batch file that executes the Java viewer application
+</ul>
+
+There are three mapping modes supported by Mapper.exe:
+<ul>
+<li>Pre-recorded:  ..\\bin> Mapper -si &lt;filename&gt; [-g &lt;gridFilename&gt;]
+<li>Live local: ..\\bin> Mapper -so[o] &lt;filename&gt; [-g &lt;gridFilename&gt;]
+<li>Live remote:  This involves the simultaneous execution of a server (robot drive)
+and at least two client consoles (robot control and map viewer).  
+For simulation, all three can be executed on the same machine;
+for real-world, the server must be executed on the robot, and the clients on
+a wirelessly connected computer.  A sample execution sequence follows.
+
+<table border=0 cellpadding=0 cellspacing=0>
+
+<tr>
+<td colspan=4>
+<hr><hr>
+</td>
+</tr>
+
+<tr valign=top>
+<td></td>
+<td><b>Server Console (Robot)</b></td>
+<td><b>Remote Control Client</b></td>
+<td><b>Remote Viewer Client</b></td>
+</tr>
+
+<tr>
+<td colspan=4>
+<hr>
+</td>
+</tr>
+
+<tr valign=top>
+<td><small>1</small></td>
+<td colspan=2><code>
+..\\bin&gt; <b>Mapper -so[o] &lt;filename&gt; -r &lt;portNumber&gt;</b><br>
+Remote control server '&lt;serverName&gt;' waiting on port &lt;portNumber&gt;<br>
+Map viewer server '&lt;serverName&gt;' waiting on port &lt;portNumber + 1&gt;
+</code>
+</td>
+<td></td>
+</tr>
+
+<tr>
+<td colspan=4>
+<hr>
+</td>
+</tr>
+
+<tr valign=top>
+<td><small>2</small></td>
+<td></td>
+<td colspan=2>
+<code>
+..\\bin&gt; <b>MapperClient &lt;serverName&gt; &lt;portNumber&gt;</b><br>
+Remote Control Server says: Welcome<br>
+Please use the following keyboard controls:<br>
+  On/off : 'o' and Home key<br>
+  Forward, Backward, Left, Right : Arrow keys, Numkey arrow keys<br>
+  Stop : Spacebary Numkey 5<br>
+  Change data file : d<br>
+  Quit : q<br>
+&gt;
+</code></td>
+</tr>
+
+<tr valign=top>
+<td></td>
+<td>
+<code>Remote client says: Hello</code>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+
+<tr>
+<td colspan=4>
+<hr>
+</td>
+</tr>
+
+<tr valign=top>
+<td><small>3</small></td>
+<td>
+</td>
+<td>
+<code>
+&gt; <b>v</b><br>
+Mode: <b>cell</b>
+</code>
+</td>
+<td>
+</td>
+</tr>
+
+<tr valign=top>
+<td></td>
+<td colspan=2>
+<code>
+vcell<br>
+Awaiting handshake from Remote Control Viewer
+</code>
+</td>
+<td>
+</td>
+</tr>
+
+<tr>
+<td colspan=4>
+<hr>
+</td>
+</tr>
+
+<tr valign=top>
+<td><small>4</small></td>
+<td>
+</td>
+<td>
+</td>
+<td>
+<code>
+..\\bin&gt; <b>viewer &lt;serverName&gt; &lt;portNumber&gt;</b><br>
+Sending greeting to host &lt;serverName&gt; on port &lt;portNumber + 1&gt;<br>
+Remote View Server says: Welcome
+</code>
+</td>
+</tr>
+
+<tr valign=top>
+<td></td>
+<td>
+<code>Remote Control Viewer says: Hello</code>
+</td>
+<td>
+<code>Viewer sonar mode set to Single Cell<br>
+&gt;</code>
+</td>
+<td>
+</td>
+</tr>
+
+<tr>
+<td colspan=4>
+<hr>
+</td>
+</tr>
+
+<tr valign=top>
+<td><small>5</small></td>
+<td colspan=3 align=center>
+<i><b>When remote viewer application comes up, press Play.<br>
+Ensure robot or simulator connection has been established.</b></i><br>
+</td>
+</tr>
+
+<tr>
+<td colspan=4>
+<hr>
+</td>
+</tr>
+
+<tr valign=top>
+<td><small>6</small></td>
+<td>
+</td>
+<td colspan=2>
+<code>
+&gt; <b>&lt;o&gt;</b>Sonar file '&lt;filename&gt;' successfully opened for write.<br>
+&gt;
+</code>
+</td>
+</tr>
+
+<tr valign=top>
+<td></td>
+<td colspan=2>
+<code>
+on<br>
+Connecting to simulator through tcp.<br>
+Syncing 0<br>
+Syncing 1<br>
+Syncing 2<br>
+Connected to robot.<br>
+Name: simler<br>
+Type: Pioneer<br>
+Subtype: p2at8<br>
+Loaded robot parameters from p2at8.p<br>
+Keydrive
+</code>
+</td>
+<td>
+</td>
+</tr>
+
+<tr>
+<td colspan=4>
+<hr>
+</td>
+</tr>
+
+<tr valign=top>
+<td><small>7</small></td>
+<td>
+</td>
+<td>
+<code>&gt;</code> <small><b>&lt;up-arrow&gt;</b></small><code>forward</code>
+</td>
+<td>
+</td>
+</tr>
+
+<tr valign=top>
+<td></td>
+<td>
+<code>forward</code>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+
+<tr>
+<td colspan=4>
+<hr>
+</td>
+</tr>
+
+<tr valign=top>
+<td><small>8</small></td>
+<td>
+</td>
+<td>
+<code>&gt;</code> <small><b>&lt;spacebar&gt;</b></small><code>stop</code>
+</td>
+<td>
+</td>
+</tr>
+
+<tr valign=top>
+<td></td>
+<td>
+<code>stop</code>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+
+<tr>
+<td colspan=4>
+<hr>
+</td>
+</tr>
+
+<tr valign=top>
+<td><small>9</small></td>
+<td>
+</td>
+<td>
+<code>&gt; <b>o</b>ff</code>
+</td>
+<td>
+</td>
+</tr>
+
+<tr valign=top>
+<td></td>
+<td>
+<code>off<br>
+Disconnecting from robot.</code>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+
+<tr>
+<td colspan=4>
+<hr>
+</td>
+</tr>
+
+<tr valign=top>
+<td><small>10</small></td>
+<td>
+</td>
+<td>
+<code>&gt; <b>q</b>uit</code>
+</td>
+<td>
+</td>
+</tr>
+
+<tr valign=top>
+<td></td>
+<td>
+<code>
+quit<br>
+Disconnecting from robot.<br>
+..\\bin&gt;
+</code>
+</td>
+<td>
+<code>..\\bin&gt;</code>
+</td>
+<td>
+<code>..\\bin&gt;</code>
+</td>
+</tr>
+
+<tr>
+<td colspan=4>
+<hr><hr>
+</td>
+</tr>
+
+</table>
+</ul>
+
+\section info Further Information
+Please contact Kevin Owens at kpo50@yahoo.com with any questions or assistance
+in extending this application or its modules.
+*/
